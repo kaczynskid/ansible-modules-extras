@@ -21,7 +21,9 @@ short_description: register a task definition in ecs
 description:
     - Creates or terminates task definitions
 version_added: "2.0"
-author: Mark Chance(@Java1Guy)
+author:
+    - "Mark Chance (@java1guy)"
+    - "Darek Kaczynski (@kaczynskid)"
 requirements: [ json, boto, botocore, boto3 ]
 options:
     state:
@@ -44,7 +46,7 @@ options:
         type: int
     containers:
         description:
-            - A list of containers definitions 
+            - A list of containers definitions
         required: False
         type: list of dicts with container definitions
     volumes:
@@ -120,14 +122,98 @@ class EcsTaskManager:
                 module.fail_json(msg="Region must be specified as a parameter, in EC2_REGION or AWS_REGION environment variables or in boto configuration file")
             self.ecs = boto3_conn(module, conn_type='client', resource='ecs', region=region, endpoint=ec2_url, **aws_connect_kwargs)
         except boto.exception.NoAuthHandlerFound, e:
-            module.fail_json(msg="Can't authorize connection - "+str(e))
+            self.module.fail_json(msg="Can't authorize connection - "+str(e))
 
     def describe_task(self, task_name):
         try:
-            response = self.ecs.describe_task_definition(taskDefinition=task_name)
-            return response['taskDefinition']
-        except botocore.exceptions.ClientError:
+            families_paginator = self.ecs.get_paginator('list_task_definition_families')
+            for families_response in families_paginator.paginate():
+                if task_name in families_response['families']:
+                    response = self.ecs.describe_task_definition(taskDefinition=task_name)
+                    return response['taskDefinition']
+
             return None
+        except botocore.exceptions.ClientError, e:
+            self.module.fail_json(msg="Can't describe task - "+str(e))
+
+    def is_matching_task(self, expected, existing):
+        # prepare containers for comaprison
+        existing_containers = list(existing['containerDefinitions']) if 'containerDefinitions' in existing else []
+        expected_containers = list(expected['containers']) if 'containers' in expected else []
+
+        for containers in [existing_containers, expected_containers]:
+            containers.sort(key=lambda k: k['name'])
+            for container in containers:
+                # in case some properties are not defined, we put the default values
+                # and sort lists properties for comparison
+
+                prop_defaults = {
+                    'disableNetworking': False,
+                    'privileged': False,
+                    'readonlyRootFilesystem': False
+                }
+
+                for prop_name, prop_default in prop_defaults.iteritems():
+                    if prop_name not in container:
+                        container[prop_name] = prop_default
+
+                simple_list_props = [
+                    'links',
+                    'dnsServers',
+                    'dnsSearchDomains',
+                    'dockerSecurityOptions'
+                ]
+
+                for list_prop in simple_list_props:
+                    if list_prop not in container:
+                        container[list_prop] = []
+                    else:
+                        container[list_prop].sort()
+
+                complex_list_props = {
+                    'environment': 'name',
+                    'mountPoints': 'sourceVolume',
+                    'portMappings': 'containerPort',
+                    'volumesFrom': 'sourceContainer',
+                    'ulimits': 'name',
+                    'extraHosts': 'hostname'
+                }
+
+                for list_prop, sort_key in complex_list_props.iteritems():
+                    if list_prop not in container:
+                        container[list_prop] = []
+                    else:
+                        container[list_prop].sort(key=lambda k: k[sort_key])
+
+                complex_list_defaults = {
+                    'mountPoints': {
+                        'readOnly': False
+                    },
+                    'portMappings': {
+                        'protocol': 'tcp',
+                        'hostPort': 0
+                    },
+                    'volumesFrom': {
+                        'readOnly': False
+                    }
+                }
+
+                for list_prop, prop_defaults in complex_list_defaults.iteritems():
+                    for list_elem in container[list_prop]:
+                        for prop_name, prop_default in prop_defaults.iteritems():
+                            if prop_name not in list_elem:
+                                list_elem[prop_name] = prop_default
+
+        # prepare volumes for comaprison
+        existing_volumes = list(existing['volumes']) if 'volumes' in existing else []
+        expected_volumes = list(expected['volumes']) if 'volumes' in expected and expected['volumes'] is not None else []
+
+        for volumes in [existing_volumes, expected_volumes]:
+            volumes.sort(key=lambda k: k['name'])
+
+        # compare task definitions
+        return (expected_containers == existing_containers and
+            expected_volumes == existing_volumes)
 
     def register_task(self, family, container_definitions, volumes):
         response = self.ecs.register_task_definition(family=family,
@@ -182,8 +268,12 @@ def main():
 
     results = dict(changed=False)
     if module.params['state'] == 'present':
-        if existing and 'status' in existing and existing['status']=="ACTIVE":
-            results['taskdefinition']=existing
+        if (existing and
+            'status' in existing and
+            existing['status'] == "ACTIVE" and
+            task_mgr.is_matching_task(module.params, existing)):
+
+            results['taskdefinition'] = existing
         else:
             if not module.check_mode:
                 # doesn't exist. create it.
