@@ -175,13 +175,19 @@ class EcsTaskManager:
         tasks = None
         if family and family is not None:
             fn_args['family'] = family
-            response = self.ecs.list_tasks(**fn_args)
+            try:
+                response = self.ecs.list_tasks(**fn_args)
+            except botocore.exceptions.ClientError, e:
+                response = {'taskArns' : []}
             tasks = set(response['taskArns'])
             del fn_args['family']
 
         if service and service is not None:
             fn_args['serviceName'] = service
-            response = self.ecs.list_tasks(**fn_args)
+            try:
+                response = self.ecs.list_tasks(**fn_args)
+            except botocore.exceptions.ClientError, e:
+                response = {'taskArns' : []}
             if tasks is None:
                 tasks = set(response['taskArns'])
             else:
@@ -190,7 +196,10 @@ class EcsTaskManager:
 
         if status and status is not None:
             fn_args['desiredStatus'] = status.upper()
-            response = self.ecs.list_tasks(**fn_args)
+            try:
+                response = self.ecs.list_tasks(**fn_args)
+            except botocore.exceptions.ClientError, e:
+                response = {'taskArns' : []}
             if tasks is None:
                 tasks = set(response['taskArns'])
             else:
