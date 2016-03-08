@@ -126,6 +126,10 @@ class EcsTaskManager:
 
     def describe_task(self, task_name):
         try:
+            families_response = self.ecs.list_task_definition_families()
+            if task_name not in families_response['families']:
+                return None
+
             response = self.ecs.describe_task_definition(taskDefinition=task_name)
             return response['taskDefinition']
         except botocore.exceptions.ClientError, e:
@@ -143,7 +147,7 @@ class EcsTaskManager:
 
             for mount_point in container['mountPoints']:
                 if 'readOnly' not in mount_point:
-                    mount_point['readOnly'] = 'false'
+                    mount_point['readOnly'] = False
 
             for port_mapping in container['portMappings']:
                 if 'protocol' not in port_mapping:
