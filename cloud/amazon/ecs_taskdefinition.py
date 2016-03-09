@@ -136,7 +136,16 @@ class EcsTaskManager:
             self.module.fail_json(msg="Can't describe task - "+str(e))
 
     def is_matching_task(self, expected, existing):
-        expectedContainers = expected['containers']
+        existingContainers = sorted(existing['containerDefinitions'], key=lambda k: k['name'])
+        expectedContainers = sorted(expected['containers'], key=lambda k: k['name'])
+
+        # sort lists properties for comaprison
+        for container in existingContainers:
+            container['environment'].sort(key=lambda k: k['name'])
+            container['mountPoints'].sort(key=lambda k: k['sourceVolume'])
+            container['portMappings'].sort(key=lambda k: k['hostPort'])
+            container['volumesFrom'].sort(key=lambda k: k['sourceContainer'])
+            container['links'].sort()
 
         for container in expectedContainers:
             # in case those properties are not defined, we put the default values
@@ -153,8 +162,18 @@ class EcsTaskManager:
                 if 'protocol' not in port_mapping:
                     port_mapping['protocol'] = 'tcp'
 
-        return (expectedContainers == existing['containerDefinitions'] and
-            expected['volumes'] == existing['volumes'])
+            # sort lists properties for comaprison
+            container['environment'].sort(key=lambda k: k['name'])
+            container['mountPoints'].sort(key=lambda k: k['sourceVolume'])
+            container['portMappings'].sort(key=lambda k: k['hostPort'])
+            container['volumesFrom'].sort(key=lambda k: k['sourceContainer'])
+            container['links'].sort()
+
+        existingVolumes = sorted(expected['volumes'], key=lambda k: k['name'])
+        expectedVolumes = sorted(expected['volumes'], key=lambda k: k['name'])
+
+        return (expectedContainers == existingContainers and
+            expectedVolumes == existingVolumes)
 
     def register_task(self, family, container_definitions, volumes):
         response = self.ecs.register_task_definition(family=family,
