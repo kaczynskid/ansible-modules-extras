@@ -136,42 +136,41 @@ class EcsTaskManager:
             self.module.fail_json(msg="Can't describe task - "+str(e))
 
     def is_matching_task(self, expected, existing):
-        existingContainers = sorted(existing['containerDefinitions'], key=lambda k: k['name'])
-        expectedContainers = sorted(expected['containers'], key=lambda k: k['name'])
+        # prepare containers for comaprison
+        existingContainers = list(existing['containerDefinitions']) if 'containerDefinitions' in existing else []
+        expectedContainers = list(expected['containers']) if 'containers' in expected else []
 
-        # sort lists properties for comaprison
-        for container in existingContainers:
-            container['environment'].sort(key=lambda k: k['name'])
-            container['mountPoints'].sort(key=lambda k: k['sourceVolume'])
-            container['portMappings'].sort(key=lambda k: k['hostPort'])
-            container['volumesFrom'].sort(key=lambda k: k['sourceContainer'])
-            container['links'].sort()
+        for containers in [existingContainers, expectedContainers]:
+            containers.sort(key=lambda k: k['name'])
+            for container in containers:
+                # in case those properties are not defined, we put the default values
+                for list_prop in ['environment', 'mountPoints', 'portMappings', 'volumesFrom', 'links']:
+                    if list_prop not in container:
+                        container[list_prop] = []
 
-        for container in expectedContainers:
-            # in case those properties are not defined, we put the default values
-            # to match the result from Amazon
-            for list_prop in ['environment', 'mountPoints', 'portMappings', 'volumesFrom']:
-                if list_prop not in container:
-                    container[list_prop] = []
+                for mount_point in container['mountPoints']:
+                    if 'readOnly' not in mount_point:
+                        mount_point['readOnly'] = False
 
-            for mount_point in container['mountPoints']:
-                if 'readOnly' not in mount_point:
-                    mount_point['readOnly'] = False
+                for port_mapping in container['portMappings']:
+                    if 'protocol' not in port_mapping:
+                        port_mapping['protocol'] = 'tcp'
 
-            for port_mapping in container['portMappings']:
-                if 'protocol' not in port_mapping:
-                    port_mapping['protocol'] = 'tcp'
+                # sort lists properties for comaprison
+                container['environment'].sort(key=lambda k: k['name'])
+                container['mountPoints'].sort(key=lambda k: k['sourceVolume'])
+                container['portMappings'].sort(key=lambda k: k['hostPort'])
+                container['volumesFrom'].sort(key=lambda k: k['sourceContainer'])
+                container['links'].sort()
 
-            # sort lists properties for comaprison
-            container['environment'].sort(key=lambda k: k['name'])
-            container['mountPoints'].sort(key=lambda k: k['sourceVolume'])
-            container['portMappings'].sort(key=lambda k: k['hostPort'])
-            container['volumesFrom'].sort(key=lambda k: k['sourceContainer'])
-            container['links'].sort()
+        # prepare volumes for comaprison
+        existingVolumes = list(existing['volumes']) if 'volumes' in existing else []
+        expectedVolumes = list(expected['volumes']) if 'volumes' in expected else []
 
-        existingVolumes = sorted(expected['volumes'], key=lambda k: k['name'])
-        expectedVolumes = sorted(expected['volumes'], key=lambda k: k['name'])
+        for volumes in [existingVolumes, expectedVolumes]:
+            volumes.sort(key=lambda k: k['name'])
 
+        # compare task definitions
         return (expectedContainers == existingContainers and
             expectedVolumes == existingVolumes)
 
