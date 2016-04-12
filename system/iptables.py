@@ -79,6 +79,7 @@ options:
         match with all protocols and is taken as default when this option is
         omitted.
     required: false
+    default: null
   source:
     description:
       - Source specification. Address can be either a network name,
@@ -99,6 +100,7 @@ options:
         Thus, a mask of 24 is equivalent to 255.255.255.0. A "!" argument
         before the address specification inverts the sense of the address.
     required: false
+    default: null
   destination:
     description:
       - Destination specification. Address can be either a network name,
@@ -119,6 +121,7 @@ options:
         Thus, a mask of 24 is equivalent to 255.255.255.0. A "!" argument
         before the address specification inverts the sense of the address.
     required: false
+    default: null
   match:
     description:
       - Specifies a match to use, that is, an extension module that tests for
@@ -127,6 +130,7 @@ options:
         specified as an array and work in short-circuit fashion, i.e. if one
         extension yields false, evaluation will stop.
     required: false
+    default: []
   jump:
     description:
       - This specifies the target of the rule; i.e., what to do if the packet
@@ -137,12 +141,14 @@ options:
         is not used), then matching the rule will have no effect on the
         packet's fate, but the counters on the rule will be incremented.
     required: false
+    default: null
   goto:
     description:
       - This specifies that the processing should continue in a user specified
         chain. Unlike the jump argument return will not continue processing in
         this chain but instead in the chain that called us via jump.
     required: false
+    default: null
   in_interface:
     description:
       - Name of an interface via which a packet was received (only for packets
@@ -152,6 +158,7 @@ options:
         this name will match. If this option is omitted, any interface name
         will match.
     required: false
+    default: null
   out_interface:
     description:
       - Name of an interface via which a packet is going to be sent (for
@@ -161,6 +168,7 @@ options:
         with this name will match. If this option is omitted, any interface
         name will match.
     required: false
+    default: null
   fragment:
     description:
       - This means that the rule only refers to second and further fragments
@@ -170,11 +178,13 @@ options:
         fragment argument, the rule will only match head fragments, or
         unfragmented packets.
     required: false
+    default: null
   set_counters:
     description:
       - This enables the administrator to initialize the packet and byte
         counters of a rule (during INSERT, APPEND, REPLACE operations).
     required: false
+    default: null
   source_port:
     description:
       - "Source port or port range specification. This can either be a service
@@ -183,6 +193,7 @@ options:
         if the last is omitted, '65535' is assumed. If the first port is
         greater than the second one they will be swapped."
     required: false
+    default: null
   destination_port:
     description:
       - "Destination port or port range specification. This can either be
@@ -191,6 +202,7 @@ options:
         '0' is assumed; if the last is omitted, '65535' is assumed. If the
         first port is greater than the second one they will be swapped."
     required: false
+    default: null
   to_ports:
     description:
       - "This specifies a destination port or range of ports to use: without
@@ -198,23 +210,61 @@ options:
         rule also specifies one of the following protocols: tcp, udp, dccp or
         sctp."
     required: false
+    default: null
+  to_destination:
+    version_added: "2.1"
+    description:
+      - "This specifies a destination address to use with DNAT: without
+        this, the destination address is never altered."
+    required: false
+    default: null
+  set_dscp_mark:
+    version_added: "2.1"
+    description:
+      - "This allows specifying a DSCP mark to be added to packets.
+        It takes either an integer or hex value. Mutually exclusive with
+        C(set_dscp_mark_class)."
+    required: false
+    default: null
+  set_dscp_mark_class:
+    version_added: "2.1"
+    description:
+      - "This allows specifying a predefined DiffServ class which will be
+        translated to the corresponding DSCP mark. Mutually exclusive with
+        C(set_dscp_mark)."
+    required: false
+    default: null
   comment:
     description:
       - "This specifies a comment that will be added to the rule"
     required: false
+    default: null
   ctstate:
     description:
       - "ctstate is a list of the connection states to match in the conntrack module.
         Possible states are: 'INVALID', 'NEW', 'ESTABLISHED', 'RELATED', 'UNTRACKED', 'SNAT', 'DNAT'"
     required: false
+    default: []
   limit:
     description:
       - "Specifies the maximum average number of matches to allow per second. The number can specify units explicitly, using `/second', `/minute', `/hour' or `/day', or parts of them (so `5/second' is the same as `5/s')."
     required: false
+    default: null
   limit_burst:
     version_added: "2.1"
     description:
       - "Specifies the maximum burst before the above limit kicks in."
+    required: false
+    default: null
+  uid_owner:
+    version_added: "2.1"
+    description:
+      - "Specifies the UID or username to use in match by owner rule."
+    required: false
+  reject_with:
+    version_added: "2.1"
+    description:
+      - "Specifies the error packet type to return while rejecting."
     required: false
 '''
 
@@ -230,6 +280,12 @@ EXAMPLES = '''
 # Allow related and established connections
 - iptables: chain=INPUT ctstate=ESTABLISHED,RELATED jump=ACCEPT
   become: yes
+
+# Tag all outbound tcp packets with DSCP mark 8
+- iptables: chain=OUTPUT jump=DSCP table=mangle set_dscp_mark=8 protocol=tcp
+
+# Tag all outbound tcp packets with DSCP DiffServ class CS1
+- iptables: chain=OUTPUT jump=DSCP table=mangle set_dscp_mark_class=CS1 protocol=tcp
 '''
 
 
@@ -252,6 +308,11 @@ def append_match(rule, param, match):
         rule.extend(['-m', match])
 
 
+def append_jump(rule, param, jump):
+    if param:
+        rule.extend(['-j', jump])
+
+
 def construct_rule(params):
     rule = []
     append_param(rule, params['protocol'], '-p', False)
@@ -259,6 +320,7 @@ def construct_rule(params):
     append_param(rule, params['destination'], '-d', False)
     append_param(rule, params['match'], '-m', True)
     append_param(rule, params['jump'], '-j', False)
+    append_param(rule, params['to_destination'], '--to-destination', False)
     append_param(rule, params['goto'], '-g', False)
     append_param(rule, params['in_interface'], '-i', False)
     append_param(rule, params['out_interface'], '-o', False)
@@ -267,6 +329,8 @@ def construct_rule(params):
     append_param(rule, params['source_port'], '--source-port', False)
     append_param(rule, params['destination_port'], '--destination-port', False)
     append_param(rule, params['to_ports'], '--to-ports', False)
+    append_param(rule, params['set_dscp_mark'], '--set-dscp', False)
+    append_param(rule, params['set_dscp_mark_class'], '--set-dscp-class', False)
     append_match(rule, params['comment'], 'comment')
     append_param(rule, params['comment'], '--comment', False)
     append_match(rule, params['ctstate'], 'state')
@@ -274,6 +338,10 @@ def construct_rule(params):
     append_match(rule, params['limit'] or params['limit_burst'], 'limit')
     append_param(rule, params['limit'], '--limit', False)
     append_param(rule, params['limit_burst'], '--limit-burst', False)
+    append_match(rule, params['uid_owner'], 'owner')
+    append_param(rule, params['uid_owner'], '--uid-owner', False)
+    append_jump(rule, params['reject_with'], 'REJECT')
+    append_param(rule, params['reject_with'], '--reject-with', False)
     return rule
 
 
@@ -312,6 +380,7 @@ def main():
             protocol=dict(required=False, default=None, type='str'),
             source=dict(required=False, default=None, type='str'),
             destination=dict(required=False, default=None, type='str'),
+            to_destination=dict(required=False, default=None, type='str'),
             match=dict(required=False, default=[], type='list'),
             jump=dict(required=False, default=None, type='str'),
             goto=dict(required=False, default=None, type='str'),
@@ -322,10 +391,17 @@ def main():
             source_port=dict(required=False, default=None, type='str'),
             destination_port=dict(required=False, default=None, type='str'),
             to_ports=dict(required=False, default=None, type='str'),
+            set_dscp_mark=dict(required=False,default=None, type='str'),
+            set_dscp_mark_class=dict(required=False,default=None, type='str'),
             comment=dict(required=False, default=None, type='str'),
             ctstate=dict(required=False, default=[], type='list'),
             limit=dict(required=False, default=None, type='str'),
             limit_burst=dict(required=False, default=None, type='str'),
+            uid_owner=dict(required=False, default=None, type='str'),
+            reject_with=dict(required=False, default=None, type='str'),
+        ),
+        mutually_exclusive=(
+            ['set_dscp_mark', 'set_dscp_mark_class'],
         ),
     )
     args = dict(

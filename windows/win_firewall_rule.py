@@ -34,7 +34,7 @@ options:
         choices: ['yes', 'no']
     state:
         description:
-            - create/remove/update or powermanage your VM
+            - should this rule be added or removed
         default: "present"
         required: true
         choices: ['present', 'absent']
@@ -114,10 +114,11 @@ EXAMPLES = '''
   action: win_firewall_rule
   args:
       name: smtp
-      enabled: yes
+      enable: yes
       state: present
       localport: 25
       action: allow
+      direction: In
       protocol: TCP
 
 '''

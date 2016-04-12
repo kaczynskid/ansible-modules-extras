@@ -170,15 +170,15 @@ def _get_cpanm_path(module):
 def main():
     arg_spec = dict(
         name=dict(default=None, required=False, aliases=['pkg']),
-        from_path=dict(default=None, required=False),
+        from_path=dict(default=None, required=False, type='path'),
         notest=dict(default=False, type='bool'),
-        locallib=dict(default=None, required=False),
+        locallib=dict(default=None, required=False, type='path'),
         mirror=dict(default=None, required=False),
         mirror_only=dict(default=False, type='bool'),
         installdeps=dict(default=False, type='bool'),
         system_lib=dict(default=False, type='bool', aliases=['use_sudo']),
         version=dict(default=None, required=False),
-        executable=dict(required=False, type='str'),
+        executable=dict(required=False, type='path'),
     )
 
     module = AnsibleModule(
@@ -202,7 +202,6 @@ def main():
     installed = _is_package_installed(module, name, locallib, cpanm, version)
 
     if not installed:
-        out_cpanm = err_cpanm = ''
         cmd       = _build_cmd_line(name, from_path, notest, locallib, mirror, mirror_only, installdeps, cpanm, use_sudo)
 
         rc_cpanm, out_cpanm, err_cpanm = module.run_command(cmd, check_rc=False)
@@ -210,7 +209,7 @@ def main():
         if rc_cpanm != 0:
             module.fail_json(msg=err_cpanm, cmd=cmd)
 
-        if err_cpanm and 'is up to date' not in err_cpanm:
+        if (err_cpanm.find('is up to date') == -1 and out_cpanm.find('is up to date') == -1):
             changed = True
 
     module.exit_json(changed=changed, binary=cpanm, name=name)

@@ -38,7 +38,7 @@ description:
     surrounded by customizable marker lines.
 notes:
   - This module supports check mode.
-  - When using 'with_' loops be aware that if you do not set a unique mark the block will be overwritten on each iteration.
+  - When using 'with_*' loops be aware that if you do not set a unique mark the block will be overwritten on each iteration.
 options:
   dest:
     aliases: [ name, destfile ]
@@ -144,10 +144,10 @@ EXAMPLES = r"""
     block: |
       {{item.name}} {{item.ip}}
     marker: "# {mark} ANSIBLE MANAGED BLOCK {{item.name}}"
-    with_items:
-        - { name: host1, ip: 10.10.1.10 }
-        - { name: host2, ip: 10.10.1.11 }
-        - { name: host3, ip: 10.10.1.12 }
+  with_items:
+      - { name: host1, ip: 10.10.1.10 }
+      - { name: host2, ip: 10.10.1.11 }
+      - { name: host3, ip: 10.10.1.12 }
 """
 
 

@@ -121,6 +121,11 @@ $job_body = {
             $update.AcceptEula()
           }
 
+          if($update.IsHidden) {
+            Write-DebugLog "Skipping hidden update $($update.Title)"
+            continue
+          }
+
           Write-DebugLog "Adding update $($update.Identity.UpdateID) - $($update.Title)"
           $res = $updates_to_install.Add($update)
 
@@ -275,7 +280,7 @@ Function DestroyScheduledJob {
       $running_tasks = @($schedserv.GetRunningTasks(0) | Where-Object { $_.Name -eq $job_name })
 
       Foreach($task_to_stop in $running_tasks) {
-          Write-DebugLog "Stopping running task $($task_to_stop.InstanceId)..."
+          Write-DebugLog "Stopping running task $($task_to_stop.InstanceGuid)..."
           $task_to_stop.Stop()
       }
 

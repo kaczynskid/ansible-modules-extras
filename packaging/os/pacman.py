@@ -234,7 +234,7 @@ def install_packages(module, pacman_path, state, packages, package_files):
         else:
             params = '-S %s' % package
 
-        cmd = "%s %s --noconfirm" % (pacman_path, params)
+        cmd = "%s %s --noconfirm --needed" % (pacman_path, params)
         rc, stdout, stderr = module.run_command(cmd, check_rc=False)
 
         if rc != 0:
@@ -267,6 +267,25 @@ def check_packages(module, pacman_path, packages, state):
         module.exit_json(changed=False, msg="package(s) already %s" % state)
 
 
+def expand_package_groups(module, pacman_path, pkgs):
+    expanded = []
+
+    for pkg in pkgs:
+        cmd = "%s -Sgq %s" % (pacman_path, pkg)
+        rc, stdout, stderr = module.run_command(cmd, check_rc=False)
+
+        if rc == 0:
+            # A group was found matching the name, so expand it
+            for name in stdout.split('\n'):
+                name = name.strip()
+                if name:
+                    expanded.append(name)
+        else:
+            expanded.append(pkg)
+
+    return expanded
+
+
 def main():
     module = AnsibleModule(
         argument_spec    = dict(
@@ -281,9 +300,6 @@ def main():
         supports_check_mode = True)
 
     pacman_path = module.get_bin_path('pacman', True)
-
-    if not os.path.exists(pacman_path):
-        module.fail_json(msg="cannot find pacman, in path %s" % (pacman_path))
 
     p = module.params
 
@@ -305,7 +321,7 @@ def main():
         upgrade(module, pacman_path)
 
     if p['name']:
-        pkgs = p['name']
+        pkgs = expand_package_groups(module, pacman_path, p['name'])
 
         pkg_files = []
         for i, pkg in enumerate(pkgs):
