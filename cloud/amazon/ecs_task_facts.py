@@ -22,7 +22,7 @@ notes:
     - for details of the parameters and returns see U(http://boto3.readthedocs.org/en/latest/reference/tasks/ecs.html)
 description:
     - Lists or describes tasks in ecs.
-version_added: "2.2"
+version_added: "2.3"
 author: Darek Kaczynski (@kaczynskid)
 requirements: [ json, boto, botocore, boto3 ]
 options:
@@ -31,7 +31,6 @@ options:
             - Set this to true if you want detailed information about the tasks.
         required: false
         default: 'false'
-        choices: ['true', 'false']
     cluster:
         description:
             - The short name or ARN of the cluster that hosts the tasks to list.
@@ -173,27 +172,27 @@ class EcsTaskManager:
         fn_args = dict()
 
         # apply non-exclusive parameters
-        if cluster and cluster is not None:
+        if cluster:
             fn_args['cluster'] = cluster
-        if container and container is not None:
+        if container:
             fn_args['containerInstance'] = container
-        if started_by and started_by is not None:
+        if started_by:
             fn_args['startedBy'] = started_by
 
         tasks = None
 
         # apply exclusive parameters
-        if family and family is not None:
+        if family:
             fn_args['family'] = family
             tasks = self.get_tasks_list(tasks, fn_args)
             del fn_args['family']
 
-        if service and service is not None:
+        if service:
             fn_args['serviceName'] = service
             tasks = self.get_tasks_list(tasks, fn_args)
             del fn_args['serviceName']
 
-        if status and status is not None:
+        if status:
             fn_args['desiredStatus'] = status.upper()
             tasks = self.get_tasks_list(tasks, fn_args)
             del fn_args['desiredStatus']
@@ -202,24 +201,28 @@ class EcsTaskManager:
         if tasks is None:
             tasks = self.get_tasks_list(tasks, fn_args)
 
+        # nothing found
+        if tasks is None:
+            tasks = set()
+
         return dict(tasks = list(tasks))
 
     def get_tasks_list(self, tasks, fn_args):
         try:
             listed = set()
             paginator = self.ecs.get_paginator('list_tasks')
-            for response in paginator.paginate(**fn_args):
-                listed.update(set(response['taskArns']))
+            for page in paginator.paginate(**fn_args):
+                listed.update(set(page['taskArns']))
 
             return listed if tasks is None else tasks.intersection(listed)
         except botocore.exceptions.ClientError:
-            return dict(taskArns = [])
+            return tasks
 
     def describe_tasks(self, cluster, container, task, family, service, status, started_by):
         fn_args = dict()
-        if cluster and cluster is not None:
+        if cluster:
             fn_args['cluster'] = cluster
-        if task and task is not None:
+        if task:
             fn_args['tasks'] = task.split(",")
         else:
             fn_args['tasks'] = self.list_tasks(cluster, container, family, service, status, started_by)['tasks']
@@ -249,7 +252,7 @@ def main():
 
     argument_spec = ec2_argument_spec()
     argument_spec.update(dict(
-        details=dict(required=False, choices=['true', 'false']),
+        details=dict(required=False, type='bool'),
         cluster=dict(required=False, type='str'),
         container=dict(required=False, type='str'),
         task=dict(required=False, type='str'),
@@ -264,9 +267,7 @@ def main():
     if not HAS_BOTO3:
       module.fail_json(msg='boto3 is required.')
 
-    show_details = False
-    if 'details' in module.params and module.params['details'] == 'true':
-        show_details = True
+    show_details = module.params['details']
 
     task_mgr = EcsTaskManager(module)
     if show_details:
