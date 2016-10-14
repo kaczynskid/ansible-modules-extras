@@ -131,11 +131,22 @@ class EcrImagesManager:
         fn_args = dict()
 
         fn_args['repositoryName'] = repository
-        fn_args['imageIds'] = image_ids
 
-        response = self.ecr.batch_delete_image(**fn_args)
+        response = dict()
+        for ids_chunk in self.chunks(image_ids, 100):
+            fn_args['imageIds'] = ids_chunk
+            chunk_response = self.ecr.batch_delete_image(**fn_args)
+
+            response['imageIds'] = response.get('imageIds', []) + chunk_response.get('imageIds', [])
+            response['failures'] = response.get('failures', []) + chunk_response.get('failures', [])
 
         return dict(image_ids=response.get('imageIds'), failures=response.get('failures'))
+
+    @staticmethod
+    def chunks(l, n):
+        """Yield successive n-sized chunks from l."""
+        for i in xrange(0, len(l), n):
+            yield l[i:i + n]
 
 
 def main():
